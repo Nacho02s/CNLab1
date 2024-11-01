@@ -18,6 +18,8 @@
 // * - Returns true if the client sends "QUIT" command, false if the client sends "CLOSE".
 // **************************************************************************************
 int processConnection(int sockFd) {
+    INFO << "Processing new connection" << ENDL;
+
     bool quitProgram = false;
     bool keepGoing = true;
 
@@ -29,21 +31,28 @@ int processConnection(int sockFd) {
         int bytesRead = read(sockFd, buffer, sizeof(buffer) - 1);
         if (bytesRead < 0) {
             perror("Read error");
+            ERROR << "Failed to read from socket" << ENDL;
             return false;
         }
 
+        INFO << "Received data: " << buffer << ENDL;
+
         // Check for one of the commands
         if (strncmp(buffer, "QUIT", 4) == 0) {
+            INFO << "Received QUIT command, exiting connection" << ENDL;
             quitProgram = true;
             keepGoing = false;
         } else if (strncmp(buffer, "CLOSE", 5) == 0) {
+            INFO << "Received CLOSE command, closing connection" << ENDL;
             keepGoing = false;
         } else {
             // Call write() to send line back to the client.
+            INFO << "Echoing data back to client" << ENDL;
             write(sockFd, buffer, bytesRead);
         }
     }
 
+    INFO << "Closing connection" << ENDL;
     return quitProgram;
 }
 
@@ -72,14 +81,19 @@ int main(int argc, char *argv[]) {
         }
     }
 
+    INFO << "Starting Echo Server" << ENDL;
+
     // *******************************************************************
     // * Creating the initial socket is the same as in a client.
     // ********************************************************************
     int listenFd = socket(AF_INET, SOCK_STREAM, 0);
     if (listenFd < 0) {
         perror("Socket creation failed");
+        FATAL << "Socket creation failed" << ENDL;
         exit(EXIT_FAILURE);
     }
+
+    INFO << "Socket created successfully" << ENDL;
 
     // ********************************************************************
     // * The bind() and calls take a structure that specifies the
@@ -97,8 +111,10 @@ int main(int argc, char *argv[]) {
     while (!bindSuccessful) {
         if (bind(listenFd, (struct sockaddr *)&servaddr, sizeof(servaddr)) == 0) {
             bindSuccessful = true;
+            INFO << "Socket bound to port " << ntohs(servaddr.sin_port) << ENDL;
         } else {
             perror("Bind failed, retrying on a different port");
+            WARNING << "Bind failed on port " << ntohs(servaddr.sin_port) << ", retrying on next port" << ENDL;
             servaddr.sin_port = htons(ntohs(servaddr.sin_port) + 1);  // Increment port
         }
     }
@@ -113,8 +129,11 @@ int main(int argc, char *argv[]) {
     int listenQueueLength = 1;
     if (listen(listenFd, listenQueueLength) < 0) {
         perror("Listen failed");
+        FATAL << "Failed to set socket to listening state" << ENDL;
         exit(EXIT_FAILURE);
     }
+
+    INFO << "Listening for connections..." << ENDL;
 
     // ********************************************************************
     // * The accept call will sleep, waiting for a connection. When
@@ -123,16 +142,21 @@ int main(int argc, char *argv[]) {
     // ********************************************************************
     bool quitProgram = false;
     while (!quitProgram) {
+        INFO << "Waiting for new connection..." << ENDL;
         int connFd = accept(listenFd, NULL, NULL);
         if (connFd < 0) {
             perror("Accept failed");
+            ERROR << "Failed to accept connection" << ENDL;
             continue;
         }
 
+        INFO << "Accepted new connection" << ENDL;
         quitProgram = processConnection(connFd);
         close(connFd);
+        INFO << "Connection closed" << ENDL;
     }
 
+    INFO << "Shutting down server" << ENDL;
     close(listenFd);
     return 0;
 }
